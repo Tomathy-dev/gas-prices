@@ -33,6 +33,21 @@
 	let priceMin = 0;
 	let priceMax = 0;
 
+	// --- Perf: marker registry for selection diffing ---
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const markerById = new Map<number, any>();
+	const markerPropsById = new Map<number, { preco: string | null; nome: string; marca: string; localidade: string }>();
+
+	// --- Perf: rAF guard — cancels any pending frame before scheduling a new one ---
+	let rafId: number | null = null;
+	function scheduleMarkerUpdate() {
+		if (rafId !== null) cancelAnimationFrame(rafId);
+		rafId = requestAnimationFrame(() => { rafId = null; updateMarkers(); });
+	}
+
+	// Track previous selection so the diff knows which marker to deselect
+	let prevSelectedId: number | null = null;
+
 	function buildIndex(list: Station[]) {
 		const sc = new Supercluster({ radius: 60, maxZoom: 16 });
 		sc.load(
@@ -56,10 +71,31 @@
 		return sc;
 	}
 
+	// Build a station icon (used both in full render and in selection diff)
+	function buildStationIcon(preco: string | null, isSelected: boolean) {
+		const price = parsePrice(preco);
+		const label = priceLabel(price, priceMin, priceMax);
+		const displayPrice = price !== null ? price.toFixed(3) : '?';
+		const w = isSelected ? 64 : 54;
+		const h = isSelected ? 26 : 22;
+		return {
+			icon: L.divIcon({
+				html: `<div class="gas-marker ${label}${isSelected ? ' selected' : ''}">${displayPrice}</div>`,
+				className: '',
+				iconSize: L.point(w, h),
+				iconAnchor: L.point(w / 2, h),
+				popupAnchor: L.point(0, -(h + 4))
+			}),
+			zOffset: isSelected ? 1000 : 0
+		};
+	}
+
 	function updateMarkers() {
 		if (!mounted || !map || !L || !markersLayer || !clusterIndex) return;
 
 		markersLayer.clearLayers();
+		markerById.clear();
+		markerPropsById.clear();
 
 		const bounds = map.getBounds();
 		const zoom = Math.floor(map.getZoom());
@@ -78,7 +114,6 @@
 			const props = feature.properties;
 
 			if (props.cluster) {
-				// Cluster circle badge
 				const count: number = props.point_count;
 				const size = count < 10 ? 34 : count < 50 ? 42 : count < 200 ? 50 : 58;
 				const icon = L.divIcon({
@@ -94,23 +129,10 @@
 				});
 				markersLayer.addLayer(marker);
 			} else {
-				// Individual station marker
-				const price = parsePrice(props.preco);
-				const label = priceLabel(price, priceMin, priceMax);
-				const displayPrice = price !== null ? price.toFixed(3) : '?';
 				const isSelected = props.id === selectedStationId;
+				const { icon, zOffset } = buildStationIcon(props.preco, isSelected);
 
-				const w = isSelected ? 64 : 54;
-				const h = isSelected ? 26 : 22;
-				const icon = L.divIcon({
-					html: `<div class="gas-marker ${label}${isSelected ? ' selected' : ''}">${displayPrice}</div>`,
-					className: '',
-					iconSize: L.point(w, h),
-					iconAnchor: L.point(w / 2, h),
-					popupAnchor: L.point(0, -(h + 4))
-				});
-
-				const marker = L.marker([lat, lon], { icon, zIndexOffset: isSelected ? 1000 : 0 });
+				const marker = L.marker([lat, lon], { icon, zIndexOffset: zOffset });
 				marker.bindPopup(
 					`<div style="color:#fff;background:#1e1e2e;padding:10px 12px;border-radius:8px;min-width:190px;font-family:system-ui,sans-serif">
 						<div style="font-weight:700;font-size:14px;margin-bottom:4px;line-height:1.3">${props.nome}</div>
@@ -120,8 +142,31 @@
 					</div>`,
 					{ className: 'gas-popup' }
 				);
+
+				// Register in map for selection diffing
+				markerById.set(props.id, marker);
+				markerPropsById.set(props.id, {
+					preco: props.preco,
+					nome: props.nome,
+					marca: props.marca,
+					localidade: props.localidade
+				});
+
 				markersLayer.addLayer(marker);
 			}
+		}
+	}
+
+	// Cheap selection diff: update only the two affected markers instead of full rebuild
+	function applySelectionDiff(oldId: number | null, newId: number | null) {
+		for (const [id, isSelected] of [[oldId, false], [newId, true]] as [number | null, boolean][]) {
+			if (id === null) continue;
+			const marker = markerById.get(id);
+			const props = markerPropsById.get(id);
+			if (!marker || !props) continue; // not in current viewport — skip
+			const { icon, zOffset } = buildStationIcon(props.preco, isSelected);
+			marker.setIcon(icon);
+			marker.setZIndexOffset(zOffset);
 		}
 	}
 
@@ -139,18 +184,19 @@
 		}).addTo(map);
 
 		markersLayer = L.layerGroup().addTo(map);
-		map.on('moveend', updateMarkers);
+		map.on('moveend', scheduleMarkerUpdate); // rAF-guarded, not direct
 		mounted = true;
 	});
 
 	onDestroy(() => {
+		if (rafId !== null) cancelAnimationFrame(rafId); // cancel pending frame
 		if (map) {
-			map.off('moveend', updateMarkers);
+			map.off('moveend', scheduleMarkerUpdate);
 			map.remove();
 		}
 	});
 
-	// Rebuild cluster index when stations list changes
+	// Stations changed → rebuild index and render immediately (data must be fresh)
 	$effect(() => {
 		const list = stations;
 		if (!mounted) return;
@@ -158,11 +204,25 @@
 		updateMarkers();
 	});
 
-	// Re-render markers when selected station changes (highlight update)
+	// Selection changed → diff if both markers are in current viewport; otherwise
+	// just deselect the old one and let the upcoming moveend rebuild pick up the new one
 	$effect(() => {
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		const _id = selectedStationId;
-		updateMarkers();
+		const newId = selectedStationId;
+		if (!mounted || !L) return;
+
+		const oldInView = prevSelectedId === null || markerById.has(prevSelectedId);
+		const newInView = newId === null || markerById.has(newId);
+
+		if (oldInView && newInView) {
+			// Both visible — pure diff, no layer rebuild
+			applySelectionDiff(prevSelectedId, newId);
+		} else if (oldInView) {
+			// New station off-screen (flyToStation will bring it in via moveend)
+			applySelectionDiff(prevSelectedId, null);
+		}
+		// else: old also off-screen, nothing visible to update; moveend will handle it
+
+		prevSelectedId = newId;
 	});
 
 	// User location marker + radius circle
