@@ -70,7 +70,9 @@
 	}
 
 	function closeDetail() {
-		stationsStore.clearSelection();
+		// Keep selectedId so the card + map marker stay highlighted after closing
+		stationsStore.setDetail(null);
+		stationsStore.setDetailLoading(false);
 		detailError = null;
 	}
 

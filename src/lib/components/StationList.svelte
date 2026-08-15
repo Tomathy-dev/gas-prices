@@ -36,7 +36,7 @@
 		const id = selectedStationId;
 		if (id === null || !listEl) return;
 		const card = listEl.querySelector(`[data-station-id="${id}"]`);
-		if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
 	});
 </script>
 

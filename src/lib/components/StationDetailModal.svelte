@@ -10,11 +10,38 @@
 
 	let { detail, loading, error = null, onClose }: Props = $props();
 
-	// Use !! so that undefined (possible if API returns unexpected shape) is treated as falsy
 	const open = $derived(loading || !!detail || !!error);
+
+	let copied = $state(false);
+	let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') onClose();
+	}
+
+	function mapsUrl(d: StationDetail): string {
+		const lat = d.Morada?.Latitude;
+		const lon = d.Morada?.Longitude;
+		if (lat && lon) return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+		// Fallback to address search
+		const addr = [d.Morada?.Morada, d.Morada?.Localidade, d.Morada?.CodPostal].filter(Boolean).join(', ');
+		return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+	}
+
+	function copyAddress(d: StationDetail) {
+		const parts = [
+			d.Nome,
+			d.Morada?.Morada,
+			d.Morada?.Localidade,
+			d.Morada?.CodPostal,
+			d.Morada?.Municipio,
+			d.Morada?.Distrito,
+		].filter(Boolean);
+		navigator.clipboard.writeText(parts.join(', ')).then(() => {
+			copied = true;
+			if (copyTimer) clearTimeout(copyTimer);
+			copyTimer = setTimeout(() => { copied = false; }, 2000);
+		});
 	}
 </script>
 
@@ -33,7 +60,7 @@
 		<!-- Panel -->
 		<div class="w-full sm:max-w-lg bg-surface-900 border border-white/10 sm:rounded-xl overflow-hidden shadow-2xl max-h-[90dvh] flex flex-col">
 
-			<!-- Header — always visible so user always has an escape -->
+			<!-- Header — always visible -->
 			<div class="flex items-start justify-between p-4 border-b border-white/8 flex-shrink-0">
 				<div class="flex-1 min-w-0">
 					{#if loading}
@@ -51,7 +78,6 @@
 						<p class="text-xs text-surface-500 mt-0.5">{error}</p>
 					{/if}
 				</div>
-				<!-- Always-visible close button -->
 				<button
 					onclick={onClose}
 					class="flex-shrink-0 ml-3 p-1.5 rounded-lg text-surface-400 hover:text-white hover:bg-surface-700 transition-colors"
@@ -63,7 +89,7 @@
 				</button>
 			</div>
 
-			<!-- Content -->
+			<!-- Scrollable content -->
 			{#if loading}
 				<div class="p-4 animate-pulse space-y-4 overflow-y-auto flex-1">
 					<div class="grid grid-cols-2 gap-3">
@@ -160,6 +186,41 @@
 							</div>
 						</div>
 					{/if}
+				</div>
+
+				<!-- Action footer -->
+				<div class="flex gap-2 px-4 py-3 border-t border-white/8 flex-shrink-0">
+					<!-- Take me there -->
+					<a
+						href={mapsUrl(detail)}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="flex-1 flex items-center justify-center gap-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm px-4 py-2.5 transition-colors"
+					>
+						<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+						</svg>
+						Como chegar
+					</a>
+
+					<!-- Copy address -->
+					<button
+						onclick={() => copyAddress(detail)}
+						class="flex items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium transition-all flex-shrink-0 {copied ? 'border-green-500/50 bg-green-500/10 text-green-400' : 'border-white/10 bg-surface-800 text-surface-300 hover:text-white hover:border-white/20'}"
+					>
+						{#if copied}
+							<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+							</svg>
+							Copiado!
+						{:else}
+							<svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+							</svg>
+							Copiar morada
+						{/if}
+					</button>
 				</div>
 			{/if}
 		</div>
