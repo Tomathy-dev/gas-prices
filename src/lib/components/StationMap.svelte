@@ -212,7 +212,7 @@
 	}
 </script>
 
-<div bind:this={mapEl} class="w-full h-full" style="min-height:300px"></div>
+<div bind:this={mapEl} class="w-full h-full" style="min-height:300px; isolation:isolate"></div>
 
 <style>
 	:global(.gas-popup .leaflet-popup-content-wrapper) {
