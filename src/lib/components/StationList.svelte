@@ -12,9 +12,10 @@
 		error: string | null;
 		selectedStationId: number | null;
 		onSelectStation: (id: number) => void;
+		searchKey?: number;
 	}
 
-	let { stations, userLat, userLon, loading, error, selectedStationId, onSelectStation }: Props = $props();
+	let { stations, userLat, userLon, loading, error, selectedStationId, onSelectStation, searchKey = 0 }: Props = $props();
 
 	let listEl: HTMLDivElement;
 
@@ -46,7 +47,9 @@
 			{#if loading}
 				<span class="animate-pulse">A carregar...</span>
 			{:else}
-				<span class="text-white font-semibold">{stations.length}</span> postos encontrados
+				{#key searchKey}
+					<span class="text-white font-semibold rainbow-pop">{stations.length}</span>
+				{/key} postos encontrados
 			{/if}
 		</span>
 		{#if priceMin > 0}

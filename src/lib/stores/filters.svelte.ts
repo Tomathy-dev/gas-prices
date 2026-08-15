@@ -10,6 +10,7 @@ let stationTypeId = $state<number | null>(null);
 let nearMe = $state(false);
 let radiusKm = $state(10);
 let sortBy = $state<SortBy>('price_asc');
+let maxPrice = $state<number | null>(null);
 
 export const filters = {
 	get fuelTypeId() { return fuelTypeId; },
@@ -39,6 +40,9 @@ export const filters = {
 	get sortBy() { return sortBy; },
 	set sortBy(v: SortBy) { sortBy = v; },
 
+	get maxPrice() { return maxPrice; },
+	set maxPrice(v: number | null) { maxPrice = v; },
+
 	reset() {
 		brandId = null;
 		districtId = null;
@@ -47,5 +51,6 @@ export const filters = {
 		nearMe = false;
 		radiusKm = 10;
 		sortBy = 'price_asc';
+		maxPrice = null;
 	}
 };

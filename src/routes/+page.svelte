@@ -18,6 +18,7 @@
 	let activeTab = $state<'list' | 'map'>('map');
 	let filterDrawerOpen = $state(false);
 	let detailError = $state<string | null>(null);
+	let searchKey = $state(0); // increments on each result change → restarts rainbow CSS animation
 	// Plain let (not $state) — bind:this writes directly; reactivity not needed here
 	let mapComponent: { flyToStation: (lat: number, lon: number) => void; flyToPortugal: () => void } | null = null;
 
@@ -75,12 +76,28 @@
 
 	// --- Derived / filtered stations ---
 
+	// Track count changes to re-trigger rainbow animation
+	let _lastCount = -1;
+	$effect(() => {
+		const count = displayedStations.length;
+		if (_lastCount !== -1 && count !== _lastCount) searchKey++;
+		_lastCount = count;
+	});
+
 	const displayedStations = $derived.by((): Station[] => {
 		let list = stationsStore.all;
 
 		if (filters.brandId !== null) {
 			const brandName = data.brands.find((b) => b.Id === filters.brandId)?.Descritivo ?? '';
 			list = list.filter((s) => s.Marca === brandName);
+		}
+
+		if (filters.maxPrice !== null) {
+			const max = filters.maxPrice;
+			list = list.filter((s) => {
+				const p = parsePrice(s.Preco);
+				return p === null || p <= max;
+			});
 		}
 
 		if (filters.nearMe && userLocation.lat !== null && userLocation.lon !== null) {
@@ -150,7 +167,9 @@
 			{#if stationsStore.loading}
 				<span class="animate-pulse text-amber-400">A carregar...</span>
 			{:else}
-				<span class="text-surface-300 font-medium">{displayedStations.length}</span>
+				{#key searchKey}
+					<span class="font-semibold text-white rainbow-pop">{displayedStations.length}</span>
+				{/key}
 				<span>postos</span>
 			{/if}
 		</div>
@@ -246,6 +265,7 @@
 						error={stationsStore.error}
 						selectedStationId={stationsStore.selectedId}
 						onSelectStation={openStationDetail}
+						{searchKey}
 					/>
 				</div>
 			{/if}

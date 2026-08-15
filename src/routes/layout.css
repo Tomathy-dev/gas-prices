@@ -65,6 +65,23 @@ body {
 	background: rgba(245, 158, 11, 1);
 }
 
+/* Count rainbow animation — plays on search/filter result change, settles to white */
+@keyframes rainbow-settle {
+	0%   { color: #ff4d4d; }
+	14%  { color: #ff9900; }
+	28%  { color: #ffe500; }
+	42%  { color: #44ff88; }
+	57%  { color: #44aaff; }
+	71%  { color: #bb66ff; }
+	82%  { color: #ff66cc; }
+	91%  { color: #fde68a; }
+	100% { color: #ffffff; }
+}
+
+.rainbow-pop {
+	animation: rainbow-settle 1.4s ease-out forwards;
+}
+
 /* Selected station marker */
 .gas-marker.selected {
 	box-shadow: 0 0 0 3px #f59e0b, 0 2px 14px rgba(0, 0, 0, 0.7) !important;

@@ -38,7 +38,8 @@
 			filters.brandId !== null,
 			filters.districtId !== null,
 			filters.stationTypeId !== null,
-			filters.nearMe
+			filters.nearMe,
+			filters.maxPrice !== null,
 		].filter(Boolean).length
 	);
 
@@ -259,6 +260,39 @@
 						{opt.label}
 					</button>
 				{/each}
+			</div>
+		</div>
+		<!-- Max price -->
+		<div>
+			<label for="max-price" class="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2">
+				Preço máximo (€/L)
+			</label>
+			<div class="flex gap-2 items-center">
+				<input
+					id="max-price"
+					type="number"
+					step="0.001"
+					min="0"
+					max="5"
+					placeholder="Ex: 1.800"
+					class="flex-1 text-sm rounded-lg border border-white/10 bg-surface-800 text-white px-3 py-2 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+					value={filters.maxPrice ?? ''}
+					oninput={(e) => {
+						const v = parseFloat((e.target as HTMLInputElement).value);
+						filters.maxPrice = isNaN(v) ? null : v;
+					}}
+				/>
+				{#if filters.maxPrice !== null}
+					<button
+						onclick={() => { filters.maxPrice = null; }}
+						class="p-2 rounded-lg text-surface-400 hover:text-white hover:bg-surface-700 transition-colors flex-shrink-0"
+						aria-label="Limpar preço máximo"
+					>
+						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				{/if}
 			</div>
 		</div>
 	</div>
