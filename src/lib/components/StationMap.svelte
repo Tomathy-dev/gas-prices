@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { Station } from '$lib/api/types';
 	import { parsePrice, priceLabel } from '$lib/utils/price';
+	import Supercluster from 'supercluster';
 
 	interface Props {
 		stations: Station[];
@@ -9,10 +10,11 @@
 		userLon: number | null;
 		radiusKm: number;
 		showRadius: boolean;
+		selectedStationId: number | null;
 		onSelectStation: (id: number) => void;
 	}
 
-	let { stations, userLat, userLon, radiusKm, showRadius, onSelectStation }: Props = $props();
+	let { stations, userLat, userLon, radiusKm, showRadius, selectedStationId, onSelectStation }: Props = $props();
 
 	let mapEl: HTMLDivElement;
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -26,6 +28,102 @@
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	let radiusCircle: any = null;
 	let mounted = $state(false);
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let clusterIndex: any = null;
+	let priceMin = 0;
+	let priceMax = 0;
+
+	function buildIndex(list: Station[]) {
+		const sc = new Supercluster({ radius: 60, maxZoom: 16 });
+		sc.load(
+			list
+				.filter((s) => s.Latitude && s.Longitude)
+				.map((s) => ({
+					type: 'Feature' as const,
+					geometry: { type: 'Point' as const, coordinates: [s.Longitude!, s.Latitude!] },
+					properties: {
+						id: s.Id,
+						preco: s.Preco,
+						nome: s.Nome,
+						marca: s.Marca ?? '',
+						localidade: s.Localidade ?? s.Municipio ?? ''
+					}
+				}))
+		);
+		const prices = list.map((s) => parsePrice(s.Preco)).filter((p): p is number => p !== null);
+		priceMin = prices.length ? Math.min(...prices) : 0;
+		priceMax = prices.length ? Math.max(...prices) : 0;
+		return sc;
+	}
+
+	function updateMarkers() {
+		if (!mounted || !map || !L || !markersLayer || !clusterIndex) return;
+
+		markersLayer.clearLayers();
+
+		const bounds = map.getBounds();
+		const zoom = Math.floor(map.getZoom());
+		const bbox: [number, number, number, number] = [
+			bounds.getWest(),
+			bounds.getSouth(),
+			bounds.getEast(),
+			bounds.getNorth()
+		];
+
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		const clusters: any[] = clusterIndex.getClusters(bbox, zoom);
+
+		for (const feature of clusters) {
+			const [lon, lat] = feature.geometry.coordinates;
+			const props = feature.properties;
+
+			if (props.cluster) {
+				// Cluster circle badge
+				const count: number = props.point_count;
+				const size = count < 10 ? 34 : count < 50 ? 42 : count < 200 ? 50 : 58;
+				const icon = L.divIcon({
+					html: `<div class="cluster-marker" style="width:${size}px;height:${size}px;font-size:${size < 42 ? 11 : 13}px">${count}</div>`,
+					className: '',
+					iconSize: L.point(size, size),
+					iconAnchor: L.point(size / 2, size / 2)
+				});
+				const marker = L.marker([lat, lon], { icon });
+				marker.on('click', () => {
+					const expansion = clusterIndex.getClusterExpansionZoom(props.cluster_id);
+					map.flyTo([lat, lon], Math.min(expansion, 18), { animate: true, duration: 0.4 });
+				});
+				markersLayer.addLayer(marker);
+			} else {
+				// Individual station marker
+				const price = parsePrice(props.preco);
+				const label = priceLabel(price, priceMin, priceMax);
+				const displayPrice = price !== null ? price.toFixed(3) : '?';
+				const isSelected = props.id === selectedStationId;
+
+				const w = isSelected ? 64 : 54;
+				const h = isSelected ? 26 : 22;
+				const icon = L.divIcon({
+					html: `<div class="gas-marker ${label}${isSelected ? ' selected' : ''}">${displayPrice}</div>`,
+					className: '',
+					iconSize: L.point(w, h),
+					iconAnchor: L.point(w / 2, h),
+					popupAnchor: L.point(0, -(h + 4))
+				});
+
+				const marker = L.marker([lat, lon], { icon, zIndexOffset: isSelected ? 1000 : 0 });
+				marker.bindPopup(
+					`<div style="color:#fff;background:#1e1e2e;padding:10px 12px;border-radius:8px;min-width:190px;font-family:system-ui,sans-serif">
+						<div style="font-weight:700;font-size:14px;margin-bottom:4px;line-height:1.3">${props.nome}</div>
+						<div style="color:#f59e0b;font-size:17px;font-weight:700">${props.preco ?? '—'}</div>
+						<div style="color:#9ca3af;font-size:12px;margin-top:3px">${props.marca}${props.marca && props.localidade ? ' · ' : ''}${props.localidade}</div>
+						<button onclick="window.__selectStation(${props.id})" style="margin-top:9px;background:#f59e0b;color:#000;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;font-size:12px;width:100%">Ver detalhes ›</button>
+					</div>`,
+					{ className: 'gas-popup' }
+				);
+				markersLayer.addLayer(marker);
+			}
+		}
+	}
 
 	onMount(async () => {
 		const mod = await import('leaflet');
@@ -41,61 +139,38 @@
 		}).addTo(map);
 
 		markersLayer = L.layerGroup().addTo(map);
+		map.on('moveend', updateMarkers);
 		mounted = true;
 	});
 
 	onDestroy(() => {
-		map?.remove();
-	});
-
-	function getPriceRange(list: Station[]): { min: number; max: number } {
-		const prices = list
-			.map((s) => parsePrice(s.Preco))
-			.filter((p): p is number => p !== null);
-		if (!prices.length) return { min: 0, max: 0 };
-		return { min: Math.min(...prices), max: Math.max(...prices) };
-	}
-
-	// Redraw markers whenever stations list changes
-	$effect(() => {
-		if (!mounted || !map || !L || !markersLayer) return;
-
-		markersLayer.clearLayers();
-
-		const { min, max } = getPriceRange(stations);
-		// Limit to 800 markers for performance; user can zoom/filter to see more
-		const visible = stations.filter((s) => s.Latitude && s.Longitude).slice(0, 800);
-
-		for (const station of visible) {
-			const price = parsePrice(station.Preco);
-			const label = priceLabel(price, min, max);
-			const displayPrice = price !== null ? price.toFixed(3) : '?';
-
-			const icon = L.divIcon({
-				html: `<div class="gas-marker ${label}">${displayPrice}</div>`,
-				className: '',
-				iconSize: L.point(54, 22),
-				iconAnchor: L.point(27, 22),
-				popupAnchor: L.point(0, -26)
-			});
-
-			const marker = L.marker([station.Latitude, station.Longitude], { icon });
-			marker.bindPopup(
-				`<div style="color:#fff;background:#1e1e2e;padding:10px 12px;border-radius:8px;min-width:190px;font-family:system-ui,sans-serif">
-					<div style="font-weight:700;font-size:14px;margin-bottom:4px;line-height:1.3">${station.Nome}</div>
-					<div style="color:#f59e0b;font-size:17px;font-weight:700">${station.Preco ?? '—'}</div>
-					<div style="color:#9ca3af;font-size:12px;margin-top:3px">${station.Marca ?? ''}${station.Marca && station.Localidade ? ' · ' : ''}${station.Localidade ?? station.Municipio ?? ''}</div>
-					<button onclick="window.__selectStation(${station.Id})" style="margin-top:9px;background:#f59e0b;color:#000;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-weight:700;font-size:12px;width:100%">Ver detalhes ›</button>
-				</div>`,
-				{ className: 'gas-popup' }
-			);
-
-			markersLayer.addLayer(marker);
+		if (map) {
+			map.off('moveend', updateMarkers);
+			map.remove();
 		}
 	});
 
-	// Update user location marker + radius circle
+	// Rebuild cluster index when stations list changes
 	$effect(() => {
+		const list = stations;
+		if (!mounted) return;
+		clusterIndex = buildIndex(list);
+		updateMarkers();
+	});
+
+	// Re-render markers when selected station changes (highlight update)
+	$effect(() => {
+		// eslint-disable-next-line @typescript-eslint/no-unused-vars
+		const _id = selectedStationId;
+		updateMarkers();
+	});
+
+	// User location marker + radius circle
+	$effect(() => {
+		const lat = userLat;
+		const lon = userLon;
+		const r = radiusKm;
+		const sr = showRadius;
 		if (!mounted || !map || !L) return;
 
 		userMarker?.remove();
@@ -103,8 +178,8 @@
 		userMarker = null;
 		radiusCircle = null;
 
-		if (userLat !== null && userLon !== null) {
-			userMarker = L.circleMarker([userLat, userLon], {
+		if (lat !== null && lon !== null) {
+			userMarker = L.circleMarker([lat, lon], {
 				radius: 10,
 				fillColor: '#3b82f6',
 				fillOpacity: 0.9,
@@ -112,19 +187,18 @@
 				weight: 2
 			}).addTo(map);
 
-			if (showRadius) {
-				radiusCircle = L.circle([userLat, userLon], {
-					radius: radiusKm * 1000,
+			if (sr) {
+				radiusCircle = L.circle([lat, lon], {
+					radius: r * 1000,
 					fillColor: '#3b82f6',
 					fillOpacity: 0.06,
 					color: '#3b82f6',
 					weight: 1.5,
 					dashArray: '6 4'
 				}).addTo(map);
-
 				map.fitBounds(radiusCircle.getBounds(), { padding: [20, 20] });
 			} else {
-				map.setView([userLat, userLon], 13, { animate: true });
+				map.setView([lat, lon], 13, { animate: true });
 			}
 		}
 	});
@@ -134,7 +208,7 @@
 	}
 
 	export function flyToStation(lat: number, lon: number) {
-		map?.setView([lat, lon], 15, { animate: true });
+		map?.setView([lat, lon], 16, { animate: true, duration: 0.5 });
 	}
 </script>
 

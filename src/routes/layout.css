@@ -33,18 +33,6 @@ body {
 	border: 1px solid rgba(255,255,255,0.25);
 }
 
-.gas-marker::after {
-	content: '';
-	position: absolute;
-	bottom: -5px;
-	left: 50%;
-	transform: translateX(-50%);
-	width: 0;
-	height: 0;
-	border-left: 5px solid transparent;
-	border-right: 5px solid transparent;
-	border-top: 5px solid inherit;
-}
 
 .gas-marker.cheap { background: #166534; border-color: #22c55e; }
 .gas-marker.mid   { background: #92400e; border-color: #f59e0b; }
@@ -57,16 +45,29 @@ body {
 	font-family: inherit;
 }
 
-/* Cluster icons */
-.marker-cluster-small,
-.marker-cluster-medium,
-.marker-cluster-large {
-	background-color: rgba(245, 158, 11, 0.2);
+/* Supercluster group badges */
+.cluster-marker {
+	border-radius: 50%;
+	background: rgba(245, 158, 11, 0.88);
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	color: #0a0a0a;
+	font-weight: 800;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.22), 0 2px 8px rgba(0, 0, 0, 0.55);
+	cursor: pointer;
+	font-size: 12px;
+	transition: transform 0.12s;
 }
-.marker-cluster-small div,
-.marker-cluster-medium div,
-.marker-cluster-large div {
-	background-color: rgba(245, 158, 11, 0.7);
-	color: #000;
-	font-weight: 700;
+.cluster-marker:hover {
+	transform: scale(1.12);
+	background: rgba(245, 158, 11, 1);
+}
+
+/* Selected station marker */
+.gas-marker.selected {
+	box-shadow: 0 0 0 3px #f59e0b, 0 2px 14px rgba(0, 0, 0, 0.7) !important;
+	border-color: #f59e0b !important;
+	font-size: 12px;
 }

@@ -10,10 +10,13 @@
 		userLon: number | null;
 		loading: boolean;
 		error: string | null;
+		selectedStationId: number | null;
 		onSelectStation: (id: number) => void;
 	}
 
-	let { stations, userLat, userLon, loading, error, onSelectStation }: Props = $props();
+	let { stations, userLat, userLon, loading, error, selectedStationId, onSelectStation }: Props = $props();
+
+	let listEl: HTMLDivElement;
 
 	const prices = $derived(
 		stations.map((s) => parsePrice(s.Preco)).filter((p): p is number => p !== null)
@@ -26,6 +29,14 @@
 		if (!s.Latitude || !s.Longitude) return null;
 		return haversine(userLat, userLon, s.Latitude, s.Longitude);
 	}
+
+	// Scroll selected card into view (useful when selection comes from map popup)
+	$effect(() => {
+		const id = selectedStationId;
+		if (id === null || !listEl) return;
+		const card = listEl.querySelector(`[data-station-id="${id}"]`);
+		if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	});
 </script>
 
 <div class="flex flex-col h-full">
@@ -48,7 +59,7 @@
 	</div>
 
 	<!-- Station cards -->
-	<div class="flex-1 overflow-y-auto p-2 space-y-1.5">
+	<div bind:this={listEl} class="flex-1 overflow-y-auto p-2 space-y-1.5">
 		{#if loading}
 			{#each { length: 8 } as _, i (i)}
 				<div class="rounded-lg border border-white/8 bg-surface-900/60 p-3 animate-pulse">
@@ -82,6 +93,7 @@
 					distance={getDistance(station)}
 					{priceMin}
 					{priceMax}
+					isSelected={station.Id === selectedStationId}
 					onClick={() => onSelectStation(station.Id)}
 				/>
 			{/each}

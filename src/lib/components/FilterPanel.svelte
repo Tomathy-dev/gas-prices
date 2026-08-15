@@ -10,6 +10,8 @@
 		municipalities: Municipality[];
 		stationCount: number;
 		onFuelTypeChange: () => void;
+		onReload: () => void;
+		onClose?: () => void;
 	}
 
 	let {
@@ -18,7 +20,9 @@
 		districts,
 		municipalities,
 		stationCount,
-		onFuelTypeChange
+		onFuelTypeChange,
+		onReload,
+		onClose
 	}: Props = $props();
 
 	const filteredMunicipalities = $derived(
@@ -34,7 +38,7 @@
 			filters.brandId !== null,
 			filters.districtId !== null,
 			filters.stationTypeId !== null,
-			filters.nearMe,
+			filters.nearMe
 		].filter(Boolean).length
 	);
 
@@ -51,11 +55,17 @@
 			}
 		}
 	}
+
+	function clearFilters() {
+		filters.reset();
+		userLocation.clear();
+		onFuelTypeChange(); // refetch so district/municipality server-side filter is lifted
+	}
 </script>
 
-<div class="flex flex-col h-full bg-surface-950/80 border-r border-white/8">
+<div class="flex flex-col h-full bg-surface-950 border-r border-white/8">
 	<!-- Header -->
-	<div class="flex items-center justify-between px-4 py-3 border-b border-white/8">
+	<div class="flex items-center justify-between px-4 py-3 border-b border-white/8 flex-shrink-0">
 		<div class="flex items-center gap-2">
 			<svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
@@ -65,14 +75,27 @@
 				<span class="text-xs px-1.5 py-0.5 rounded-full bg-amber-500 text-black font-bold">{activeFilterCount}</span>
 			{/if}
 		</div>
-		{#if activeFilterCount > 0}
-			<button
-				onclick={() => { filters.reset(); userLocation.clear(); }}
-				class="text-xs text-surface-400 hover:text-amber-400 transition-colors"
-			>
-				Limpar
-			</button>
-		{/if}
+		<div class="flex items-center gap-2">
+			{#if activeFilterCount > 0}
+				<button
+					onclick={clearFilters}
+					class="text-xs text-surface-400 hover:text-amber-400 transition-colors"
+				>
+					Limpar
+				</button>
+			{/if}
+			{#if onClose}
+				<button
+					onclick={onClose}
+					class="p-1 rounded-lg text-surface-400 hover:text-white hover:bg-surface-700 transition-colors"
+					aria-label="Fechar filtros"
+				>
+					<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			{/if}
+		</div>
 	</div>
 
 	<div class="flex-1 overflow-y-auto p-4 space-y-5">
@@ -126,7 +149,6 @@
 				<p class="mt-1.5 text-xs text-red-400">{userLocation.error}</p>
 			{/if}
 
-			<!-- Radius picker (shown when near me is active) -->
 			{#if filters.nearMe}
 				<div class="mt-3">
 					<p class="text-xs text-surface-400 mb-2">Raio de pesquisa</p>
@@ -148,7 +170,7 @@
 			{/if}
 		</div>
 
-		<!-- District + Municipality (only when not using Near Me) -->
+		<!-- District + Municipality (hidden when Near Me active) -->
 		{#if !filters.nearMe}
 			<div>
 				<label for="district" class="block text-xs font-semibold text-surface-400 uppercase tracking-wider mb-2">
@@ -161,6 +183,7 @@
 					onchange={(e) => {
 						const v = (e.target as HTMLSelectElement).value;
 						filters.districtId = v ? Number(v) : null;
+						onFuelTypeChange(); // refetch with new district
 					}}
 				>
 					<option value="">Todos os distritos</option>
@@ -182,6 +205,7 @@
 						onchange={(e) => {
 							const v = (e.target as HTMLSelectElement).value;
 							filters.municipalityIds = v ? [Number(v)] : [];
+							onFuelTypeChange(); // refetch with new municipality
 						}}
 					>
 						<option value="">Todos os municípios</option>
@@ -239,8 +263,17 @@
 		</div>
 	</div>
 
-	<!-- Footer count -->
-	<div class="px-4 py-3 border-t border-white/8 text-xs text-surface-500 text-center">
-		{stationCount} postos visíveis
+	<!-- Footer: count + reload -->
+	<div class="flex items-center justify-between px-4 py-3 border-t border-white/8 flex-shrink-0">
+		<span class="text-xs text-surface-500">{stationCount} postos visíveis</span>
+		<button
+			onclick={onReload}
+			class="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-white/10 text-surface-400 hover:text-white hover:border-amber-500/50 hover:bg-amber-500/10 transition-all"
+		>
+			<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+			</svg>
+			Atualizar
+		</button>
 	</div>
 </div>

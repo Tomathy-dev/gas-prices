@@ -17,6 +17,7 @@
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tailwindcss/vite": "^4.3.0",
+		"@types/supercluster": "^7.1.3",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
 		"tailwindcss": "^4.3.0",
@@ -28,6 +29,7 @@
 		"@types/leaflet": "^1.9.22",
 		"@types/leaflet.markercluster": "^1.5.6",
 		"leaflet": "^1.9.4",
-		"leaflet.markercluster": "^1.5.3"
+		"leaflet.markercluster": "^1.5.3",
+		"supercluster": "^9.0.0"
 	}
 }

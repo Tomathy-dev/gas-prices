@@ -7,10 +7,11 @@
 		distance: number | null;
 		priceMin: number;
 		priceMax: number;
+		isSelected: boolean;
 		onClick: () => void;
 	}
 
-	let { station, distance, priceMin, priceMax, onClick }: Props = $props();
+	let { station, distance, priceMin, priceMax, isSelected, onClick }: Props = $props();
 
 	const price = $derived(parsePrice(station.Preco));
 	const label = $derived(priceLabel(price, priceMin, priceMax));
@@ -31,7 +32,12 @@
 </script>
 
 <button
-	class="w-full text-left rounded-lg border border-white/8 bg-surface-900/60 hover:bg-surface-800/80 hover:border-amber-500/30 transition-all duration-150 p-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+	class={`w-full text-left rounded-lg border transition-all duration-150 p-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+		isSelected
+			? 'border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/30'
+			: 'border-white/8 bg-surface-900/60 hover:bg-surface-800/80 hover:border-amber-500/30'
+	}`}
+	data-station-id={station.Id}
 	onclick={onClick}
 >
 	<div class="flex items-start gap-3">

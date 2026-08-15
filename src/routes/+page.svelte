@@ -17,7 +17,9 @@
 
 	let activeTab = $state<'list' | 'map'>('map');
 	let filterDrawerOpen = $state(false);
-	let mapComponent = $state<ReturnType<typeof StationMap> | null>(null);
+	let detailError = $state<string | null>(null);
+	// Plain let (not $state) — bind:this writes directly; reactivity not needed here
+	let mapComponent: { flyToStation: (lat: number, lon: number) => void; flyToPortugal: () => void } | null = null;
 
 	// --- Data fetching ---
 
@@ -29,9 +31,10 @@
 				idsTiposComb: filters.fuelTypeId,
 				idMarca: filters.brandId,
 				idDistrito: !filters.nearMe ? filters.districtId : null,
-				idsMunicipios: !filters.nearMe && filters.municipalityIds.length > 0
-					? filters.municipalityIds.join(',')
-					: undefined,
+				idsMunicipios:
+					!filters.nearMe && filters.municipalityIds.length > 0
+						? filters.municipalityIds.join(',')
+						: undefined
 			});
 			stationsStore.setAll(results);
 		} catch (e) {
@@ -43,14 +46,23 @@
 
 	async function openStationDetail(id: number) {
 		stationsStore.setSelectedId(id);
+
+		// Zoom map to the station
+		const station = displayedStations.find((s) => s.Id === id);
+		if (station?.Latitude && station?.Longitude) {
+			mapComponent?.flyToStation(station.Latitude, station.Longitude);
+			// On mobile: switch to map tab so user can see the zoom
+			if (activeTab === 'list') activeTab = 'map';
+		}
+
+		detailError = null;
 		stationsStore.setDetailLoading(true);
 		stationsStore.setDetail(null);
 		try {
 			const detail = await dgeg.getStationDetail(id);
 			stationsStore.setDetail(detail);
 		} catch (e) {
-			stationsStore.setDetail(null);
-			stationsStore.setDetailLoading(false);
+			detailError = e instanceof Error ? e.message : 'Erro ao carregar detalhes';
 		} finally {
 			stationsStore.setDetailLoading(false);
 		}
@@ -58,6 +70,7 @@
 
 	function closeDetail() {
 		stationsStore.clearSelection();
+		detailError = null;
 	}
 
 	// --- Derived / filtered stations ---
@@ -65,14 +78,11 @@
 	const displayedStations = $derived.by((): Station[] => {
 		let list = stationsStore.all;
 
-		// Client-side brand filter (when API didn't filter it)
 		if (filters.brandId !== null) {
-			const brandId = filters.brandId;
-			const brandName = data.brands.find((b) => b.Id === brandId)?.Descritivo ?? '';
+			const brandName = data.brands.find((b) => b.Id === filters.brandId)?.Descritivo ?? '';
 			list = list.filter((s) => s.Marca === brandName);
 		}
 
-		// Near Me radius filter
 		if (filters.nearMe && userLocation.lat !== null && userLocation.lon !== null) {
 			const lat = userLocation.lat;
 			const lon = userLocation.lon;
@@ -83,7 +93,6 @@
 			});
 		}
 
-		// Sort
 		const uLat = userLocation.lat;
 		const uLon = userLocation.lon;
 		list = [...list].sort((a, b) => {
@@ -100,8 +109,10 @@
 				}
 				case 'distance_asc': {
 					if (uLat === null || uLon === null) return 0;
-					const da = (a.Latitude && a.Longitude) ? haversine(uLat, uLon, a.Latitude, a.Longitude) : Infinity;
-					const db = (b.Latitude && b.Longitude) ? haversine(uLat, uLon, b.Latitude, b.Longitude) : Infinity;
+					const da =
+						a.Latitude && a.Longitude ? haversine(uLat, uLon, a.Latitude, a.Longitude) : Infinity;
+					const db =
+						b.Latitude && b.Longitude ? haversine(uLat, uLon, b.Latitude, b.Longitude) : Infinity;
 					return da - db;
 				}
 				case 'name_asc':
@@ -116,9 +127,8 @@
 
 	onMount(() => {
 		fetchStations();
-
-		// expose station click for map popup buttons
-		(window as Window & { __selectStation?: (id: number) => void }).__selectStation = openStationDetail;
+		(window as Window & { __selectStation?: (id: number) => void }).__selectStation =
+			openStationDetail;
 	});
 </script>
 
@@ -135,7 +145,7 @@
 			<span class="font-bold text-lg tracking-tight text-white">GasPT</span>
 		</div>
 
-		<!-- Center: status / loading -->
+		<!-- Center: status -->
 		<div class="hidden sm:flex items-center gap-2 text-sm text-surface-400">
 			{#if stationsStore.loading}
 				<span class="animate-pulse text-amber-400">A carregar...</span>
@@ -145,9 +155,8 @@
 			{/if}
 		</div>
 
-		<!-- Right: controls -->
+		<!-- Right: map/list tabs (mobile) + filter toggle (mobile) -->
 		<div class="flex items-center gap-1.5">
-			<!-- Map / List tabs (desktop hidden, visible on mobile) -->
 			<div class="flex sm:hidden items-center rounded-lg bg-surface-800 border border-white/10 p-0.5">
 				<button
 					onclick={() => (activeTab = 'map')}
@@ -163,7 +172,7 @@
 				</button>
 			</div>
 
-			<!-- Filter drawer toggle (mobile) -->
+			<!-- Filter button (mobile only) -->
 			<button
 				onclick={() => (filterDrawerOpen = !filterDrawerOpen)}
 				class="sm:hidden relative p-2 rounded-lg border border-white/10 text-surface-400 hover:text-white hover:border-white/20 transition-all"
@@ -172,18 +181,12 @@
 				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
 				</svg>
-			</button>
-
-			<!-- Reload button -->
-			<button
-				onclick={fetchStations}
-				disabled={stationsStore.loading}
-				class="p-2 rounded-lg border border-white/10 text-surface-400 hover:text-white hover:border-white/20 transition-all disabled:opacity-40"
-				aria-label="Recarregar"
-			>
-				<svg class={`w-4 h-4 ${stationsStore.loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-				</svg>
+				<!-- Active filter count badge -->
+				{#if [filters.brandId, filters.districtId].filter(Boolean).length + (filters.nearMe ? 1 : 0) > 0}
+					<span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-black text-[9px] font-bold flex items-center justify-center">
+						{[filters.brandId, filters.districtId].filter(Boolean).length + (filters.nearMe ? 1 : 0)}
+					</span>
+				{/if}
 			</button>
 		</div>
 	</header>
@@ -199,12 +202,13 @@
 				municipalities={data.municipalities}
 				stationCount={displayedStations.length}
 				onFuelTypeChange={fetchStations}
+				onReload={fetchStations}
 			/>
 		</aside>
 
 		<!-- Main content area -->
 		<main class="flex flex-1 overflow-hidden">
-			<!-- Desktop: split view — list left, map right -->
+			<!-- Desktop: list left, map right -->
 			<div class="hidden sm:flex flex-col w-80 border-r border-white/8 overflow-hidden">
 				<StationList
 					stations={displayedStations}
@@ -212,11 +216,12 @@
 					userLon={userLocation.lon}
 					loading={stationsStore.loading}
 					error={stationsStore.error}
+					selectedStationId={stationsStore.selectedId}
 					onSelectStation={openStationDetail}
 				/>
 			</div>
 
-			<!-- Map (always rendered on desktop, shown on mobile only when map tab active) -->
+			<!-- Map -->
 			<div class={`flex-1 overflow-hidden ${activeTab === 'list' ? 'hidden sm:block' : 'block'}`}>
 				<StationMap
 					bind:this={mapComponent}
@@ -225,6 +230,7 @@
 					userLon={userLocation.lon}
 					radiusKm={filters.radiusKm}
 					showRadius={filters.nearMe}
+					selectedStationId={stationsStore.selectedId}
 					onSelectStation={openStationDetail}
 				/>
 			</div>
@@ -238,6 +244,7 @@
 						userLon={userLocation.lon}
 						loading={stationsStore.loading}
 						error={stationsStore.error}
+						selectedStationId={stationsStore.selectedId}
 						onSelectStation={openStationDetail}
 					/>
 				</div>
@@ -245,29 +252,36 @@
 		</main>
 	</div>
 
-	<!-- ===== MOBILE FILTER DRAWER ===== -->
+	<!-- ===== MOBILE FILTER — BOTTOM SHEET ===== -->
 	{#if filterDrawerOpen}
+		<!-- Backdrop -->
 		<div
-			class="sm:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+			class="sm:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
 			onclick={() => (filterDrawerOpen = false)}
 			role="presentation"
+		></div>
+
+		<!-- Sheet slides up from bottom -->
+		<div
+			class="sm:hidden fixed inset-x-0 bottom-0 z-50 flex flex-col max-h-[88dvh] bg-surface-950 border-t border-white/12 rounded-t-2xl overflow-hidden shadow-2xl"
+			role="dialog"
+			aria-modal="true"
 		>
-			<div
-				class="absolute right-0 top-0 bottom-0 w-72 overflow-hidden"
-				onclick={(e) => e.stopPropagation()}
-				role="presentation"
-			>
-				<div class="h-full">
-					<FilterPanel
-						fuelTypes={data.fuelTypes}
-						brands={data.brands}
-						districts={data.districts}
-						municipalities={data.municipalities}
-						stationCount={displayedStations.length}
-						onFuelTypeChange={() => { fetchStations(); filterDrawerOpen = false; }}
-					/>
-				</div>
+			<!-- Drag handle -->
+			<div class="flex-shrink-0 flex justify-center pt-3 pb-1">
+				<div class="w-10 h-1 rounded-full bg-surface-600"></div>
 			</div>
+
+			<FilterPanel
+				fuelTypes={data.fuelTypes}
+				brands={data.brands}
+				districts={data.districts}
+				municipalities={data.municipalities}
+				stationCount={displayedStations.length}
+				onFuelTypeChange={() => { fetchStations(); filterDrawerOpen = false; }}
+				onReload={() => { fetchStations(); filterDrawerOpen = false; }}
+				onClose={() => (filterDrawerOpen = false)}
+			/>
 		</div>
 	{/if}
 
@@ -275,6 +289,7 @@
 	<StationDetailModal
 		detail={stationsStore.selectedDetail}
 		loading={stationsStore.detailLoading}
+		error={detailError}
 		onClose={closeDetail}
 	/>
 </div>
