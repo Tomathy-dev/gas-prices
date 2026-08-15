@@ -1,0 +1,72 @@
+@import 'tailwindcss';
+
+@import '@skeletonlabs/skeleton';
+@import '@skeletonlabs/skeleton-svelte';
+@import '../gaspt-theme.css';
+
+@import 'leaflet/dist/leaflet.css';
+
+/* Force dark background regardless of OS theme */
+html {
+	color-scheme: dark;
+	background-color: oklch(0.10 0.004 260);
+}
+
+body {
+	min-height: 100dvh;
+	background-color: oklch(0.10 0.004 260);
+}
+
+/* Leaflet custom marker styles */
+.gas-marker {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 4px;
+	font-size: 11px;
+	font-weight: 700;
+	color: #fff;
+	padding: 2px 6px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+	white-space: nowrap;
+	letter-spacing: -0.02em;
+	border: 1px solid rgba(255,255,255,0.25);
+}
+
+.gas-marker::after {
+	content: '';
+	position: absolute;
+	bottom: -5px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 0;
+	height: 0;
+	border-left: 5px solid transparent;
+	border-right: 5px solid transparent;
+	border-top: 5px solid inherit;
+}
+
+.gas-marker.cheap { background: #166534; border-color: #22c55e; }
+.gas-marker.mid   { background: #92400e; border-color: #f59e0b; }
+.gas-marker.expensive { background: #991b1b; border-color: #ef4444; }
+.gas-marker.unknown   { background: #374151; border-color: #9ca3af; }
+
+/* Override Leaflet dark tile layer text */
+.leaflet-container {
+	background: #1a1a2e;
+	font-family: inherit;
+}
+
+/* Cluster icons */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+	background-color: rgba(245, 158, 11, 0.2);
+}
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+	background-color: rgba(245, 158, 11, 0.7);
+	color: #000;
+	font-weight: 700;
+}
